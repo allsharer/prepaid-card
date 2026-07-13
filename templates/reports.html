@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold"><i class="bi bi-funnel me-2"></i>Filters</div>
+  <div class="card-body">
+    <form method="get" action="/reports" class="row g-3 align-items-end">
+
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold">From Date</label>
+        <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold">To Date</label>
+        <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+      </div>
+
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold">Type</label>
+        <select name="trans_type" class="form-select">
+          <option value="">All Types</option>
+          <option value="Receipt" {% if trans_type == 'Receipt' %}selected{% endif %}>Receipt</option>
+          <option value="Payment" {% if trans_type == 'Payment' %}selected{% endif %}>Payment</option>
+        </select>
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold">Company</label>
+        <select name="company_id" class="form-select">
+          <option value="">All Companies</option>
+          <optgroup label="Payees">
+            {% for p in payees %}
+            <option value="{{ p.refno }}" {% if company_id == p.refno|string %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </optgroup>
+          <optgroup label="Payers">
+            {% for p in payers %}
+            <option value="{{ p.refno }}" {% if company_id == p.refno|string %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+          </optgroup>
+        </select>
+      </div>
+
+      <div class="col-md-1">
+        <button type="submit" class="btn btn-primary w-100">
+          <i class="bi bi-search"></i>
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">Statement</span>
+    {% if transactions %}
+    <span class="fw-bold {% if total >= 0 %}text-success{% else %}text-danger{% endif %}">
+      {{ 'Balance' if show_balance else 'Total' }}: {{ total | fmt_amount }}
+    </span>
+    {% endif %}
+  </div>
+  <div class="card-body p-0">
+    {% if transactions %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Ref</th><th>Date</th><th>Type</th><th>Company</th><th>Details</th>
+            <th class="text-end">Amount</th>
+            {% if show_balance %}<th class="text-end">Balance</th>{% endif %}
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transactions %}
+          <tr>
+            <td class="text-muted small">{{ t.refno }}</td>
+            <td>{{ t.date }}</td>
+            <td>
+              <span class="badge {% if t.type == 'Receipt' %}badge-receipt{% else %}badge-payment{% endif %}">
+                {{ t.type }}
+              </span>
+            </td>
+            <td>{{ t.company }}</td>
+            <td class="text-muted small">{{ t.details }}</td>
+            <td class="text-end fw-semibold {% if t.type == 'Receipt' %}amount-receipt{% else %}amount-payment{% endif %}">
+              {% if t.type == 'Receipt' %}+{% else %}-{% endif %}{{ t.amount | fmt_amount }}
+            </td>
+            {% if show_balance %}
+            <td class="text-end {% if t.balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ t.balance | fmt_amount }}
+            </td>
+            {% endif %}
+            <td class="text-end">
+              <a href="/transactions/{{ t.refno }}/edit" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <form method="post" action="/transactions/{{ t.refno }}/delete" class="d-inline"
+                    onsubmit="return confirm('Delete this transaction?')">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">No transactions match the current filters.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}

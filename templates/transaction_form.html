@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-header">
+        <h5 class="mb-0">{{ title }}</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" action="{{ action }}">
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Date</label>
+            <input type="date" name="date" class="form-control"
+                   value="{{ transaction.date if transaction else today }}" required>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Type</label>
+            <select name="type" id="type-select" class="form-select" onchange="loadCompanies()">
+              <option value="Payment" {% if transaction and transaction.type == 'Payment' %}selected{% endif %}>Payment</option>
+              <option value="Receipt" {% if transaction and transaction.type == 'Receipt' %}selected{% endif %}>Receipt</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold" id="company-label">Payee</label>
+            <select name="company" id="company-select" class="form-select" required>
+              {% if transaction %}
+              <option value="{{ transaction.company }}" selected>{{ transaction.company_name }}</option>
+              {% endif %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Details</label>
+            <input type="text" name="details" class="form-control"
+                   value="{{ transaction.details if transaction else '' }}"
+                   placeholder="Optional description">
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Amount</label>
+            <div class="input-group">
+              <span class="input-group-text">$</span>
+              <input type="number" name="amount" class="form-control" step="0.01" min="0.01"
+                     value="{{ '%.2f' % transaction.amount if transaction else '' }}"
+                     placeholder="0.00" required>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-check-lg me-1"></i>Save
+            </button>
+            <a href="/" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+  const existingCompany = {{ transaction.company | tojson if transaction else 'null' }};
+
+  function loadCompanies() {
+    const type = document.getElementById('type-select').value;
+    const companyType = type === 'Payment' ? 'Payee' : 'Payer';
+    document.getElementById('company-label').textContent = companyType;
+
+    fetch(`/api/companies/${companyType}`)
+      .then(r => r.json())
+      .then(companies => {
+        const sel = document.getElementById('company-select');
+        sel.innerHTML = companies.length
+          ? companies.map(c =>
+              `<option value="${c.refno}" ${c.refno == existingCompany ? 'selected' : ''}>${c.name}</option>`
+            ).join('')
+          : '<option value="">-- No ' + companyType + 's available --</option>';
+      });
+  }
+
+  // Load on page ready
+  loadCompanies();
+</script>
+{% endblock %}

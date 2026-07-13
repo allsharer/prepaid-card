@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="card balance-card shadow-sm h-100">
+      <div class="card-body p-4">
+        <div class="text-white-50 small mb-1">CURRENT BALANCE</div>
+        <div class="amount">{{ balance | fmt_amount }}</div>
+        <div class="text-white-50 small mt-2">Prepaid Card Account</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-8 d-flex align-items-center">
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="/transactions/add" class="btn btn-primary btn-lg">
+        <i class="bi bi-plus-circle me-1"></i>Add Transaction
+      </a>
+      <a href="/reports" class="btn btn-outline-secondary btn-lg">
+        <i class="bi bi-bar-chart me-1"></i>Reports
+      </a>
+      <a href="/companies" class="btn btn-outline-secondary btn-lg">
+        <i class="bi bi-building me-1"></i>Companies
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold">Recent Transactions</span>
+    <a href="/reports" class="btn btn-sm btn-outline-primary">View All</a>
+  </div>
+  <div class="card-body p-0">
+    {% if transactions %}
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Ref</th><th>Date</th><th>Type</th><th>Company</th><th>Details</th>
+            <th class="text-end">Amount</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transactions %}
+          <tr>
+            <td class="text-muted small">{{ t.refno }}</td>
+            <td>{{ t.date }}</td>
+            <td>
+              <span class="badge {% if t.type == 'Receipt' %}badge-receipt{% else %}badge-payment{% endif %}">
+                {{ t.type }}
+              </span>
+            </td>
+            <td>{{ t.company }}</td>
+            <td class="text-muted small">{{ t.details }}</td>
+            <td class="text-end fw-semibold {% if t.type == 'Receipt' %}amount-receipt{% else %}amount-payment{% endif %}">
+              {% if t.type == 'Receipt' %}+{% else %}-{% endif %}{{ t.amount | fmt_amount }}
+            </td>
+            <td class="text-end">
+              <a href="/transactions/{{ t.refno }}/edit" class="btn btn-sm btn-outline-secondary me-1">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <form method="post" action="/transactions/{{ t.refno }}/delete" class="d-inline"
+                    onsubmit="return confirm('Delete this transaction?')">
+                <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">No transactions yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% endblock %}
