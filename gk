@@ -1,0 +1,24 @@
+#!/bin/bash
+
+APP_DIR=~/.local/bin/prepaid-card
+
+if [ "$1" = "--help" ]; then
+    echo "Usage: gk [--web] [--help]"
+    echo "  (no flag)  Start the terminal app"
+    echo "  --web      Start the web app (port 5000)"
+    echo "  --help     Show this help"
+    exit 0
+fi
+
+cd "$APP_DIR"
+source ~/mybankenv/bin/activate
+
+if [ "$1" = "--web" ]; then
+    (sleep 1.5 && xdg-open http://localhost:5000 2>/dev/null) &
+    python app.py
+else
+    python prepaid_tracker.py
+fi
+
+deactivate
+echo
