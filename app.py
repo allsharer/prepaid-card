@@ -10,18 +10,20 @@ app = Flask(__name__)
 app.secret_key = 'prepaid-card-tracker-key'
 
 # ── Browser watchdog ──────────────────────────────────────────────────────────
-# Shuts the server down ~10 s after the last /ping is received.
-# The browser sends /ping every 3 s; 10 s allows ~3 missed pings during
-# normal page navigation before triggering shutdown.
+# Shuts the server down after no ping is received for _PING_TIMEOUT seconds.
+# The browser sends /ping every 5 s and also immediately on page load and when
+# the tab returns to the foreground (visibilitychange). The 45 s timeout
+# comfortably survives page navigation and browser throttling of background tabs
+# while still shutting down promptly when the tab or browser is closed.
 
 _last_ping = time.time()
-_PING_TIMEOUT = 10  # seconds
+_PING_TIMEOUT = 45  # seconds
 
 
 def _watchdog():
-    time.sleep(5)  # grace period so the browser has time to load the first page
+    time.sleep(10)  # grace period so the browser has time to load the first page
     while True:
-        time.sleep(3)
+        time.sleep(5)
         if time.time() - _last_ping > _PING_TIMEOUT:
             print("\nNo browser activity detected — shutting down.", flush=True)
             os.kill(os.getpid(), signal.SIGINT)
