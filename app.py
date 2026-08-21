@@ -10,14 +10,23 @@ app = Flask(__name__)
 app.secret_key = 'prepaid-card-tracker-key'
 
 # ── Browser watchdog ──────────────────────────────────────────────────────────
-# Shuts the server down after no ping is received for _PING_TIMEOUT seconds.
-# The browser sends /ping every 5 s and also immediately on page load and when
-# the tab returns to the foreground (visibilitychange). The 45 s timeout
-# comfortably survives page navigation and browser throttling of background tabs
-# while still shutting down promptly when the tab or browser is closed.
+# Two-path shutdown:
+#   Fast path  — /closed (sendBeacon on pagehide): shuts down within ~1.5 s.
+#                A 1.5 s grace period lets a new page's /ping cancel the timer
+#                when the user navigates within the app rather than closing.
+#   Fallback   — /ping heartbeat every 3 s. Timeout is 90 s so browser background
+#                throttling (Chrome can drop timers to ~1/min) never false-fires.
+#                Covers crashes / force-kills where pagehide never fires.
 
 _last_ping = time.time()
-_PING_TIMEOUT = 45  # seconds
+_PING_TIMEOUT = 90  # seconds
+_close_timer = None
+_close_lock = threading.Lock()
+
+
+def _do_shutdown():
+    print("\nBrowser tab closed — shutting down.", flush=True)
+    os.kill(os.getpid(), signal.SIGINT)
 
 
 def _watchdog():
@@ -71,8 +80,24 @@ def validate_date(date_str):
 
 @app.route('/ping', methods=['POST'])
 def ping():
-    global _last_ping
+    global _last_ping, _close_timer
     _last_ping = time.time()
+    with _close_lock:
+        if _close_timer is not None:
+            _close_timer.cancel()
+            _close_timer = None
+    return '', 204
+
+
+@app.route('/closed', methods=['POST'])
+def closed():
+    global _close_timer
+    with _close_lock:
+        if _close_timer is not None:
+            _close_timer.cancel()
+        _close_timer = threading.Timer(1.5, _do_shutdown)
+        _close_timer.daemon = True
+        _close_timer.start()
     return '', 204
 
 
