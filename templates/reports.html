@@ -1,7 +1,31 @@
 {% extends "base.html" %}
+
+{% block scripts %}
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    .print-header { display: block !important; }
+    body { background: #fff !important; }
+    .card { border: none !important; box-shadow: none !important; }
+    .card-header { background: none !important; border-bottom: 1px solid #dee2e6 !important; }
+    .table { font-size: .85rem; }
+    .col-actions { display: none !important; }
+  }
+  .print-header { display: none; }
+</style>
+{% endblock %}
+
 {% block content %}
 
-<div class="card shadow-sm mb-4">
+<div class="print-header mb-3">
+  <h4 class="mb-1">Prepaid Card — Statement</h4>
+  <div class="text-muted small">
+    {% if date_from or date_to %}{{ date_from or '…' }} to {{ date_to or '…' }}{% endif %}
+    {% if trans_type %} &nbsp;·&nbsp; {{ trans_type }}s only{% endif %}
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4 no-print">
   <div class="card-header fw-semibold"><i class="bi bi-funnel me-2"></i>Filters</div>
   <div class="card-body">
     <form method="get" action="/reports" class="row g-3 align-items-end">
@@ -55,11 +79,16 @@
 <div class="card shadow-sm">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span class="fw-semibold">Statement</span>
-    {% if transactions %}
-    <span class="fw-bold {% if total >= 0 %}text-success{% else %}text-danger{% endif %}">
-      {{ 'Balance' if show_balance else 'Total' }}: {{ total | fmt_amount }}
-    </span>
-    {% endif %}
+    <div class="d-flex align-items-center gap-3">
+      {% if transactions %}
+      <span class="fw-bold {% if total >= 0 %}text-success{% else %}text-danger{% endif %}">
+        {{ 'Balance' if show_balance else 'Total' }}: {{ total | fmt_amount }}
+      </span>
+      <button class="btn btn-sm btn-outline-secondary no-print" onclick="window.print()">
+        <i class="bi bi-printer me-1"></i>Print
+      </button>
+      {% endif %}
+    </div>
   </div>
   <div class="card-body p-0">
     {% if transactions %}
@@ -70,7 +99,7 @@
             <th>Ref</th><th>Date</th><th>Type</th><th>Company</th><th>Details</th>
             <th class="text-end">Amount</th>
             {% if show_balance %}<th class="text-end">Balance</th>{% endif %}
-            <th></th>
+            <th class="col-actions"></th>
           </tr>
         </thead>
         <tbody>
@@ -93,7 +122,7 @@
               {{ t.balance | fmt_amount }}
             </td>
             {% endif %}
-            <td class="text-end">
+            <td class="text-end col-actions">
               <a href="/transactions/{{ t.refno }}/edit" class="btn btn-sm btn-outline-secondary me-1">
                 <i class="bi bi-pencil"></i>
               </a>
