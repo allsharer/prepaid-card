@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=GKOne
+Comment=GKOne Prepaid Card
+Exec=/home/trevor/bin/gk --web
+Icon=accessories-calculator
+Terminal=false
+Categories=Office;Finance;
+StartupNotify=false
