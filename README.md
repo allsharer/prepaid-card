@@ -1,6 +1,6 @@
-# Prepaid Card Tracker
+# GKOne Prepaid Card
 
-A personal account tracker for a prepaid card. Available as both a terminal app and a web app, sharing the same SQLite database so both can be used side by side.
+A personal account tracker for the GKOne Prepaid Card. Available as both a terminal app and a web app, sharing the same SQLite database so both can be used side by side.
 
 ## Features
 
