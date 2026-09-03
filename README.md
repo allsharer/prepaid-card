@@ -57,3 +57,12 @@ sqlite3 prepaid_card.db < initial_data.sql
 | `gk` | Main launcher script |
 | `runapp` | Activates venv and runs the terminal app |
 | `runweb` | Activates venv and runs the web app |
+
+## Android app sync
+
+`sync_server.py` is a small receiver the [Android app](../android/) pushes to for
+two-way sync of this same `prepaid_card.db`. Run `sync_schema.py` once (adds `uid` /
+`updated_at` columns, a `tombstones` table, and triggers — the web and terminal apps
+are untouched), then run `./sync-server` (binds this host's Tailscale IP, port 8765;
+token in `.sync_token`). Or install `prepaid-sync.service` as a `systemctl --user`
+unit. Merge is last-write-wins per row by `uid`; deletes propagate as tombstones.

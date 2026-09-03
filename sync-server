@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Launch the prepaid-card sync receiver (for the Android app to push to).
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")"
+
+VENV="${MYBANKENV:-$HOME/mybankenv}"
+if [ -x "$VENV/bin/python" ]; then
+    PY="$VENV/bin/python"
+else
+    PY="$(command -v python3)"
+fi
+
+exec "$PY" sync_server.py

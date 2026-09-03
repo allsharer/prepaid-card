@@ -1,0 +1,13 @@
+[Unit]
+Description=GKOne Prepaid Card sync receiver (Android app -> prepaid_card.db)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/prepaid-card/sync-server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

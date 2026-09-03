@@ -24,8 +24,20 @@ _close_timer = None
 _close_lock = threading.Lock()
 
 
+def _kill_sync():
+    """Stop the sibling sync receiver that gk --web started, if any."""
+    pid = os.environ.get('PREPAID_SYNC_PID')
+    if not pid:
+        return
+    try:
+        os.kill(int(pid), signal.SIGTERM)
+    except (ValueError, ProcessLookupError, PermissionError):
+        pass
+
+
 def _do_shutdown():
     print("\nBrowser tab closed — shutting down.", flush=True)
+    _kill_sync()
     os.kill(os.getpid(), signal.SIGINT)
 
 
@@ -35,6 +47,7 @@ def _watchdog():
         time.sleep(5)
         if time.time() - _last_ping > _PING_TIMEOUT:
             print("\nNo browser activity detected — shutting down.", flush=True)
+            _kill_sync()
             os.kill(os.getpid(), signal.SIGINT)
             break
 
