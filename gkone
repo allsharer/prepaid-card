@@ -68,13 +68,13 @@ do_install() {
     # ── 2. Application files ────────────────────────────────────────────────
     mkdir -p "$APP_DIR"
     for f in app.py prepaid_tracker.py sync_server.py sync_schema.py sync-server \
-             runapp runweb initial_data.sql prepaid-sync.service README.md; do
+             initial_data.sql prepaid-sync.service README.md; do
         [[ -f "$HERE/$f" ]] && cp "$HERE/$f" "$APP_DIR/"
     done
     rm -rf "$APP_DIR/templates" "$APP_DIR/static"
     cp -r "$HERE/templates" "$APP_DIR/templates"
     cp -r "$HERE/static" "$APP_DIR/static"
-    chmod +x "$APP_DIR/sync-server" "$APP_DIR/runapp" "$APP_DIR/runweb" 2>/dev/null || true
+    chmod +x "$APP_DIR/sync-server" 2>/dev/null || true
     ok "Application files: $APP_DIR"
 
     # Carry over an existing sync token on first install only (keeps the Android

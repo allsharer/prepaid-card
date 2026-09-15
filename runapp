@@ -1,4 +1,0 @@
-source ~/mybankenv/bin/activate
-python prepaid_tracker.py
-deactivate
-
