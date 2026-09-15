@@ -25,7 +25,7 @@ _close_lock = threading.Lock()
 
 
 def _kill_sync():
-    """Stop the sibling sync receiver that gk --web started, if any."""
+    """Stop the sibling sync receiver that gkone --web started, if any."""
     pid = os.environ.get('PREPAID_SYNC_PID')
     if not pid:
         return
