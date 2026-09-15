@@ -251,6 +251,13 @@ cd "$APP_DIR"
 source ~/mybankenv/bin/activate
 
 if [ "$1" = "--web" ]; then
+    # Kill any stale Flask instance still holding port 5000.
+    STALE=$(lsof -ti:5000 2>/dev/null)
+    if [[ -n "$STALE" ]]; then
+        kill $STALE 2>/dev/null && echo "Stopped stale process on port 5000 (pid $STALE)"
+        sleep 0.5
+    fi
+
     # Also bring up the Android sync receiver, unless one is already running
     # (started manually or via the systemd user unit). Only stop what we start.
     if pgrep -f "python.*sync_server\.py" >/dev/null 2>&1; then
