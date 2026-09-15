@@ -11,6 +11,10 @@
 #     gkone --uninstall           Remove the installed program, keep your database
 #     gkone --uninstall --purge-data
 #                                  Remove everything, including the database
+#     gkone --backup              Back up the database (kept in ~/.local/share/prepaid-card/backups)
+#     gkone --list-backups        List available backups with timestamps and sizes
+#     gkone --restore             Restore the database from a backup (interactive)
+#     gkone --restore N           Restore backup number N (as shown by --list-backups)
 #     gkone --help                Show this help
 #
 #  Installing requires Python 3 with the `venv` module (Debian/Ubuntu:
@@ -19,6 +23,7 @@
 # =============================================================================
 
 APP_DIR=~/.local/bin/prepaid-card
+BACKUP_DIR="$HOME/.local/share/prepaid-card/backups"
 
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; C='\033[0;36m'; W='\033[1m'; N='\033[0m'
 ok()   { echo -e "${G}  ✓${N} $*"; }
@@ -26,7 +31,7 @@ info() { echo -e "${C}  ℹ${N} $*"; }
 warn() { echo -e "${Y}  ⚠${N} $*"; }
 die()  { echo -e "${R}  ✗${N} $*" >&2; exit 1; }
 
-usage() { sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 do_install() {
     set -euo pipefail
@@ -87,6 +92,17 @@ do_install() {
 
     # ── 3. Database — never overwritten once installed ─────────────────────
     if [[ -f "$APP_DIR/prepaid_card.db" ]]; then
+        # Auto-backup before upgrading so the user can roll back if needed.
+        mkdir -p "$BACKUP_DIR" || true
+        local TS
+        TS=$(date +%Y%m%d_%H%M%S)
+        if cp "$APP_DIR/prepaid_card.db" "$BACKUP_DIR/prepaid_card_${TS}.db" 2>/dev/null; then
+            info "Database backed up before upgrade: $BACKUP_DIR/prepaid_card_${TS}.db"
+            if [[ -f "$APP_DIR/.sync_token" ]]; then
+                cp "$APP_DIR/.sync_token" "$BACKUP_DIR/sync_token_${TS}" 2>/dev/null \
+                    && chmod 600 "$BACKUP_DIR/sync_token_${TS}" || true
+            fi
+        fi
         info "Existing installed database left untouched"
     elif [[ -f "$HERE/prepaid_card.db" ]]; then
         cp "$HERE/prepaid_card.db" "$APP_DIR/prepaid_card.db"
@@ -226,11 +242,121 @@ do_uninstall() {
     if [[ "$PURGE" -eq 0 && -d "$APP_DIR" ]]; then
         echo -e "  Your data is still at ${C}$APP_DIR${N} — delete it yourself, or re-run with ${Y}--uninstall --purge-data${N}."
     fi
+    [[ -d "$BACKUP_DIR" ]] && echo -e "  Backups (if any) are kept at ${C}$BACKUP_DIR${N} — not deleted."
     echo -e "  The shared virtual environment ${C}~/mybankenv${N} was left in place (other tools may use it)."
     echo ""
 }
 
+do_backup() {
+    [[ -d "$APP_DIR" ]] || die "App not installed at $APP_DIR — run gkone --install first"
+    [[ -f "$APP_DIR/prepaid_card.db" ]] || die "No database found at $APP_DIR/prepaid_card.db"
+    mkdir -p "$BACKUP_DIR"
+    local TS
+    TS=$(date +%Y%m%d_%H%M%S)
+    cp "$APP_DIR/prepaid_card.db" "$BACKUP_DIR/prepaid_card_${TS}.db"
+    ok "Backed up: $BACKUP_DIR/prepaid_card_${TS}.db"
+    if [[ -f "$APP_DIR/.sync_token" ]]; then
+        cp "$APP_DIR/.sync_token" "$BACKUP_DIR/sync_token_${TS}"
+        chmod 600 "$BACKUP_DIR/sync_token_${TS}"
+    fi
+    # Prune: keep only the 10 most recent backups
+    local ts_part
+    while IFS= read -r old; do
+        ts_part="${old##*prepaid_card_}"
+        ts_part="${ts_part%.db}"
+        rm -f "$old" "$BACKUP_DIR/sync_token_${ts_part}"
+        info "Pruned old backup: $(basename "$old")"
+    done < <(ls -1t "$BACKUP_DIR"/prepaid_card_*.db 2>/dev/null | tail -n +11)
+}
+
+do_list_backups() {
+    local files=() f size i=1
+    while IFS= read -r f; do files+=("$f"); done < <(ls -1t "$BACKUP_DIR"/prepaid_card_*.db 2>/dev/null)
+    if [[ ${#files[@]} -eq 0 ]]; then
+        info "No backups yet — run: gkone --backup"
+        return
+    fi
+    echo -e "\n${W}  Backups in $BACKUP_DIR:${N}"
+    for f in "${files[@]}"; do
+        size=$(du -h "$f" | cut -f1)
+        echo -e "  ${C}[$i]${N}  $(basename "$f")  (${size})"
+        ((i++))
+    done
+    echo ""
+}
+
+do_restore() {
+    local files=() f
+    while IFS= read -r f; do files+=("$f"); done < <(ls -1t "$BACKUP_DIR"/prepaid_card_*.db 2>/dev/null)
+    [[ ${#files[@]} -gt 0 ]] || die "No backups found in $BACKUP_DIR — run: gkone --backup"
+    [[ -d "$APP_DIR" ]] || die "App not installed at $APP_DIR — run gkone --install first"
+
+    local restore_file="" idx choice confirm tok ts_part TS
+    if [[ -n "${1:-}" ]]; then
+        if [[ "$1" =~ ^[0-9]+$ ]]; then
+            idx=$(( $1 - 1 ))
+            [[ $idx -lt ${#files[@]} ]] || die "No backup #$1 — run gkone --list-backups to see what's available"
+            restore_file="${files[$idx]}"
+        else
+            [[ -f "$1" ]] || die "File not found: $1"
+            restore_file="$1"
+        fi
+    else
+        do_list_backups
+        echo -n "  Enter number to restore (Enter to cancel): "
+        read -r choice
+        [[ -n "$choice" ]] || { info "Cancelled"; return; }
+        [[ "$choice" =~ ^[0-9]+$ ]] || die "Not a valid number"
+        idx=$(( choice - 1 ))
+        [[ $idx -lt ${#files[@]} ]] || die "No backup #$choice"
+        restore_file="${files[$idx]}"
+    fi
+
+    echo -e "\n  ${Y}Restore: $(basename "$restore_file")${N}"
+    echo -e "  ${R}This will replace your current database.${N}"
+    echo -n "  Type 'yes' to confirm: "
+    read -r confirm
+    [[ "$confirm" == "yes" ]] || { info "Cancelled"; return; }
+
+    # Auto-save the current DB before overwriting so the user can undo
+    if [[ -f "$APP_DIR/prepaid_card.db" ]]; then
+        TS=$(date +%Y%m%d_%H%M%S)
+        mkdir -p "$BACKUP_DIR"
+        cp "$APP_DIR/prepaid_card.db" "$BACKUP_DIR/prepaid_card_${TS}_pre-restore.db"
+        info "Current database saved: prepaid_card_${TS}_pre-restore.db"
+    fi
+
+    cp "$restore_file" "$APP_DIR/prepaid_card.db"
+    ok "Database restored from: $(basename "$restore_file")"
+
+    # Offer to restore the matching sync token captured with this backup
+    ts_part="${restore_file##*prepaid_card_}"
+    ts_part="${ts_part%.db}"
+    if [[ -f "$BACKUP_DIR/sync_token_${ts_part}" ]]; then
+        echo -n "  Restore matching sync token too? [y/N] "
+        read -r tok
+        if [[ "$tok" =~ ^[Yy]$ ]]; then
+            cp "$BACKUP_DIR/sync_token_${ts_part}" "$APP_DIR/.sync_token"
+            chmod 600 "$APP_DIR/.sync_token"
+            ok "Sync token restored"
+        fi
+    fi
+}
+
 case "${1:-}" in
+    --backup)
+        do_backup
+        exit 0
+        ;;
+    --list-backups)
+        do_list_backups
+        exit 0
+        ;;
+    --restore)
+        shift
+        do_restore "$@"
+        exit 0
+        ;;
     --install)
         shift
         do_install "$@"
