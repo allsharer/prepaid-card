@@ -377,6 +377,7 @@ def reports():
     date_to = request.args.get('date_to', '').strip()
     company_id = request.args.get('company_id', '').strip()
     trans_type = request.args.get('trans_type', '').strip()
+    order = 'newest' if request.args.get('order') == 'newest' else 'oldest'
 
     query = """
         SELECT a.refno, a.date, a.type, c.name AS company, a.details, a.amount
@@ -432,7 +433,17 @@ def reports():
             'balance': running,
         })
 
+    # Balances are computed oldest → newest; only the display order flips.
+    if order == 'newest':
+        rows_with_balance.reverse()
+
+    # Same filters, opposite order — for the toggle button.
+    toggle_args = {k: v for k, v in request.args.items() if k != 'order' and v}
+    toggle_args['order'] = 'oldest' if order == 'newest' else 'newest'
+
     return render_template('reports.html',
+                           order=order,
+                           toggle_order_url=url_for('reports', **toggle_args),
                            payees=payees,
                            payers=payers,
                            transactions=rows_with_balance,

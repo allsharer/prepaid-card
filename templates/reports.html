@@ -29,6 +29,7 @@
   <div class="card-header fw-semibold"><i class="bi bi-funnel me-2"></i>Filters</div>
   <div class="card-body">
     <form method="get" action="/reports" class="row g-3 align-items-end">
+      <input type="hidden" name="order" value="{{ order }}">
 
       <div class="col-md-3">
         <label class="form-label small fw-semibold">From Date</label>
@@ -84,6 +85,10 @@
       <span class="fw-bold {% if total >= 0 %}text-success{% else %}text-danger{% endif %}">
         {{ 'Balance' if show_balance else 'Total' }}: {{ total | fmt_amount }}
       </span>
+      <a href="{{ toggle_order_url }}" class="btn btn-sm btn-outline-secondary no-print"
+         title="Switch to {{ 'oldest' if order == 'newest' else 'newest' }} first">
+        <i class="bi bi-sort-{{ 'down' if order == 'newest' else 'up' }} me-1"></i>{{ 'Newest first' if order == 'newest' else 'Oldest first' }}
+      </a>
       <button class="btn btn-sm btn-outline-secondary no-print" onclick="window.print()">
         <i class="bi bi-printer me-1"></i>Print
       </button>
