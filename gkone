@@ -72,7 +72,7 @@ do_install() {
 
     # ── 2. Application files ────────────────────────────────────────────────
     mkdir -p "$APP_DIR"
-    for f in app.py prepaid_tracker.py sync_server.py sync_schema.py sync-server \
+    for f in app.py prepaid_tracker.py backup.py sync_server.py sync_schema.py sync-server \
              initial_data.sql prepaid-sync.service README.md; do
         [[ -f "$HERE/$f" ]] && cp "$HERE/$f" "$APP_DIR/"
     done
@@ -259,14 +259,15 @@ do_backup() {
         cp "$APP_DIR/.sync_token" "$BACKUP_DIR/sync_token_${TS}"
         chmod 600 "$BACKUP_DIR/sync_token_${TS}"
     fi
-    # Prune: keep only the 10 most recent backups
+    # Prune: keep only the 10 most recent backups. Automatic pre-sync copies
+    # (*_pre-sync.db) are pruned separately by the sync server, so they don't count here.
     local ts_part
     while IFS= read -r old; do
         ts_part="${old##*prepaid_card_}"
         ts_part="${ts_part%.db}"
         rm -f "$old" "$BACKUP_DIR/sync_token_${ts_part}"
         info "Pruned old backup: $(basename "$old")"
-    done < <(ls -1t "$BACKUP_DIR"/prepaid_card_*.db 2>/dev/null | tail -n +11)
+    done < <(ls -1t "$BACKUP_DIR"/prepaid_card_*.db 2>/dev/null | grep -v '_pre-sync\.db$' | tail -n +11)
 }
 
 do_list_backups() {

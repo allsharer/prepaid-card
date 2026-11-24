@@ -8,6 +8,9 @@ A personal account tracker for the GKOne Prepaid Card. Available as both a termi
 - Running balance calculated across all transactions
 - Filter and report transactions by date range, type, or company
 - Add and remove payees/payers (removal blocked if linked to transactions)
+- Take and restore database backups from either app (terminal: **Backup** menu;
+  web: **Backups** page) — same backup folder as `gkone --backup/--restore`.
+  A restore first saves the current data as a `_pre-restore` backup.
 - Terminal UI with arrow-key navigation and Escape to go back
 - Web UI auto-closes the Flask server when the browser tab is shut
 
@@ -84,6 +87,7 @@ sqlite3 prepaid_card.db < initial_data.sql
 | `gkone` | Main launcher / installer script (`--web`, `--install`, `--uninstall`) |
 | `runapp` | Activates venv and runs the terminal app |
 | `runweb` | Activates venv and runs the web app |
+| `backup.py` | Backup / restore shared by both apps and the sync receiver |
 | `sync_server.py` | Android sync receiver (see below) |
 | `sync_schema.py` | Additive DB migration adding sync columns/triggers |
 | `sync-server` | Shell launcher for `sync_server.py` |
@@ -97,3 +101,14 @@ two-way sync of this same `prepaid_card.db`. Run `sync_schema.py` once (adds `ui
 are untouched), then run `./sync-server` (binds this host's Tailscale IP, port 8765;
 token in `.sync_token`). Or install `prepaid-sync.service` as a `systemctl --user`
 unit. Merge is last-write-wins per row by `uid`; deletes propagate as tombstones.
+
+Before every sync the receiver saves `prepaid_card_<time>_pre-sync.db` in
+`~/.local/share/prepaid-card/backups/` (newest 10 kept; restore with `gkone --restore`).
+If the backup fails, the sync is refused.
+
+**Duplicates:** a new transaction from the phone is skipped when the computer already
+has one with the same type, payee/payer and amount, dated within 3 days
+(`DUP_WINDOW_DAYS`), that the phone doesn't know about yet — i.e. the same
+transaction entered on both devices. The computer's copy is kept and the phone's
+copy is deleted on the phone through the sync reply. Skips are printed in the
+sync-server output and listed under `duplicates` in the reply.

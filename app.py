@@ -6,6 +6,8 @@ import time
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 
+import backup
+
 app = Flask(__name__)
 app.secret_key = 'prepaid-card-tracker-key'
 
@@ -323,6 +325,38 @@ def add_company():
     conn.close()
     flash(f'{company_type} "{name}" added.', 'success')
     return redirect(url_for('companies'))
+
+
+# ── Backups ───────────────────────────────────────────────────────────────────
+
+@app.route('/backups')
+def backups():
+    return render_template('backups.html',
+                           backups=backup.list_backups(),
+                           backup_dir=backup.BACKUP_DIR,
+                           balance=get_balance())
+
+
+@app.route('/backups/create', methods=['POST'])
+def create_backup():
+    try:
+        path = backup.make_backup(db_path=DB_PATH)
+        flash(f'Backup saved: {os.path.basename(path)}', 'success')
+    except Exception as e:
+        flash(f'Backup failed: {e}', 'danger')
+    return redirect(url_for('backups'))
+
+
+@app.route('/backups/restore', methods=['POST'])
+def restore_backup():
+    name = request.form.get('name', '')
+    try:
+        safety = backup.restore_backup(name, db_path=DB_PATH)
+        flash(f'Restored {name}. Balance: {format_amount(get_balance())}. '
+              f'The previous data was saved as {os.path.basename(safety)}.', 'success')
+    except Exception as e:
+        flash(f'Restore failed: {e}', 'danger')
+    return redirect(url_for('backups'))
 
 
 # ── Reports ───────────────────────────────────────────────────────────────────

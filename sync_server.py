@@ -21,11 +21,17 @@ import sys
 
 from flask import Flask, jsonify, request
 
+import backup
 from sync_schema import DB_PATH, NOW_SQL, ensure_schema
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOKEN_PATH = os.path.join(HERE, ".sync_token")
 PORT = int(os.environ.get("SYNC_PORT", "8765"))
+BACKUP_DIR = backup.BACKUP_DIR
+
+# A new transaction from the phone counts as a duplicate of one already here
+# when type, payee/payer and amount match and the dates are this close.
+DUP_WINDOW_DAYS = 3
 
 app = Flask(__name__)
 
@@ -60,6 +66,35 @@ def _tombstone_map(conn):
     return {r["uid"]: r["deleted_at"] for r in conn.execute("SELECT uid, deleted_at FROM tombstones")}
 
 
+def backup_before_sync():
+    """Back up the database (keeping the newest pre-sync copies).
+
+    Returns the backup path. Raises on failure so the sync is not applied
+    without a backup.
+    """
+    return backup.make_backup(backup.PRE_SYNC, DB_PATH)
+
+
+def _find_duplicate(conn, a, company_refno, phone_uids, claimed):
+    """Return a local account row that `a` (new from the phone) duplicates, or None.
+
+    Only local rows the phone doesn't already have are candidates: if the phone
+    knows a row, the two are separate transactions it has seen side by side.
+    """
+    rows = conn.execute(
+        "SELECT refno, uid, date, details FROM account "
+        "WHERE type = ? AND company = ? AND ABS(amount - ?) < 0.005 "
+        "AND ABS(julianday(date) - julianday(?)) <= ? "
+        "ORDER BY ABS(julianday(date) - julianday(?)), refno",
+        (a["type"], company_refno, float(a["amount"]), a["date"],
+         DUP_WINDOW_DAYS, a["date"]),
+    ).fetchall()
+    for r in rows:
+        if r["uid"] not in phone_uids and r["refno"] not in claimed:
+            return r
+    return None
+
+
 @app.get("/ping")
 def ping():
     return jsonify(ok=True, service="prepaid-card-sync")
@@ -75,7 +110,21 @@ def sync():
     in_account = payload.get("account", [])
     in_tombstones = payload.get("tombstones", [])
 
-    applied = {"companies": 0, "account": 0, "tombstones": 0, "errors": 0}
+    try:
+        backup_path = backup_before_sync()
+    except Exception as e:
+        print(f"sync refused: backup failed: {e}", file=sys.stderr)
+        return jsonify(error=f"backup failed, nothing synced: {e}"), 500
+    print(f"pre-sync backup: {backup_path}")
+
+    # Every uid the phone holds (live or deleted) — used for duplicate checks.
+    phone_uids = {a.get("uid") for a in in_account if a.get("uid")} | {
+        t.get("uid") for t in in_tombstones if t.get("uid")
+    }
+    claimed = set()      # local refnos already matched to a phone duplicate
+    duplicates = []
+
+    applied = {"companies": 0, "account": 0, "tombstones": 0, "duplicates": 0, "errors": 0}
     conn = db()
     try:
         # 1. incoming tombstones -----------------------------------------------
@@ -153,6 +202,27 @@ def sync():
                     a.get("details"), float(a["amount"]), ts,
                 )
                 if row is None:
+                    dup = _find_duplicate(conn, a, comp["refno"], phone_uids, claimed)
+                    if dup is not None:
+                        # Keep the computer's copy; tombstone the phone's so the
+                        # phone drops it and takes ours from the reply instead.
+                        claimed.add(dup["refno"])
+                        conn.execute(
+                            f"INSERT OR REPLACE INTO tombstones (uid, tbl, deleted_at) "
+                            f"VALUES (?, 'account', {NOW_SQL})",
+                            (uid,),
+                        )
+                        duplicates.append({
+                            "phone": {"date": a["date"], "details": a.get("details"),
+                                      "amount": float(a["amount"])},
+                            "kept_refno": dup["refno"], "kept_date": dup["date"],
+                            "kept_details": dup["details"],
+                        })
+                        applied["duplicates"] += 1
+                        print(f"skipped duplicate: phone {a['date']} {a.get('details')!r} "
+                              f"{a['amount']} = local #{dup['refno']} {dup['date']} "
+                              f"{dup['details']!r}")
+                        continue
                     conn.execute(
                         "INSERT INTO account (date, type, company, details, amount, updated_at, uid) "
                         "VALUES (?,?,?,?,?,?,?)",
@@ -209,6 +279,8 @@ def sync():
 
     return jsonify(
         applied=applied,
+        backup=os.path.basename(backup_path),
+        duplicates=duplicates,
         balance=balance,
         companies=out_companies,
         account=out_account,

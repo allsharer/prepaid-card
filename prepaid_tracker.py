@@ -1,6 +1,9 @@
+import os
 import sqlite3
 from datetime import datetime
 import sys
+
+import backup
 
 import questionary
 from questionary import Choice, Style as QStyle
@@ -719,6 +722,7 @@ def main_menu():
             Choice("Payee   —  Add / Remove payees",              value='2'),
             Choice("Payer   —  Add / Remove payers",              value='3'),
             Choice("Reports —  View statements",                   value='4'),
+            Choice("Backup  —  Take / Restore a backup",           value='5'),
             Choice("Exit",                                         value='0'),
         ])
 
@@ -730,6 +734,8 @@ def main_menu():
             payer_menu()
         elif choice == '4':
             reports_menu()
+        elif choice == '5':
+            backup_menu()
         elif choice == '0' or choice is None:
             console.clear()
             console.print("\n  [dim]Goodbye.[/dim]\n")
@@ -786,6 +792,83 @@ def reports_menu():
             list_payees_report()
         elif choice == '7':
             list_payers_report()
+        elif choice == '0' or choice is None:
+            break
+
+
+# ── Backup / Restore ─────────────────────────────────────────────────────────
+
+def _backup_label(b):
+    when = b["when"].strftime("%d %b %Y  %H:%M")
+    if b["count"] is None:
+        detail = "[unreadable]"
+    else:
+        detail = f"{b['count']} transactions · balance {fmt(b['balance'])}"
+    return f"{when}  {b['kind']:<17}  {detail}"
+
+
+def take_backup():
+    show_header("Take a Backup")
+    try:
+        path = backup.make_backup(db_path=os.path.abspath(DB))
+        ok(f"Backup saved: [cyan]{os.path.basename(path)}[/cyan]")
+        console.print(f"   [dim]in {backup.BACKUP_DIR}[/dim]")
+    except Exception as e:
+        err(f"Backup failed: {e}")
+    console.input("\n  [dim]Press Enter to continue...[/dim]")
+
+
+def restore_backup_menu():
+    show_header("Restore a Backup")
+    backups = backup.list_backups()
+    if not backups:
+        warn("No backups yet — take one first.")
+        console.input("\n  [dim]Press Enter to continue...[/dim]")
+        return
+
+    console.print(f"  Current balance: {balance_text(get_balance())}\n")
+    choices = [Choice(title=_backup_label(b), value=b["name"]) for b in backups]
+    choices.append(Choice(title="— Cancel —", value=None))
+    name = ask_select("Restore which backup? (newest first)", choices)
+    if name is None:
+        print_cancel(); return
+    b = next(x for x in backups if x["name"] == name)
+
+    console.print(Panel(
+        f"  [dim]Backup[/dim]   {b['name']}\n"
+        f"  [dim]Taken[/dim]    {b['when'].strftime('%d %b %Y %H:%M:%S')}  ({b['kind']})\n"
+        f"  [dim]Balance[/dim]  {fmt(b['balance']) if b['count'] is not None else '—'}\n\n"
+        "  Everything recorded after this backup will be replaced.\n"
+        "  The current data is saved first, so you can restore it again.\n"
+        "  [yellow]Note:[/yellow] the phone keeps its own data — the next sync may\n"
+        "  bring back transactions the phone still has.",
+        title="[bold red]Restore Backup[/bold red]", border_style="red", padding=(1, 2)))
+
+    confirm = console.input("\n  [bold red]Replace the current data with this backup? (y/N):[/bold red] ").strip().lower()
+    if confirm != 'y':
+        print_cancel()
+    else:
+        try:
+            safety = backup.restore_backup(name, db_path=os.path.abspath(DB))
+            ok(f"Restored {name}.  Balance: {balance_text(get_balance())}")
+            console.print(f"   [dim]Previous data saved as {os.path.basename(safety)}[/dim]")
+        except Exception as e:
+            err(f"Restore failed: {e}")
+    console.input("\n  [dim]Press Enter to continue...[/dim]")
+
+
+def backup_menu():
+    while True:
+        show_header("Backup")
+        choice = ask_select("What would you like to do?", [
+            Choice("Take a Backup now",  value='1'),
+            Choice("Restore a Backup",   value='2'),
+            Choice("Back",               value='0'),
+        ])
+        if choice == '1':
+            take_backup()
+        elif choice == '2':
+            restore_backup_menu()
         elif choice == '0' or choice is None:
             break
 
